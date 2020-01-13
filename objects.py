@@ -88,7 +88,7 @@ class Target(object):
         self.cooldown_timer -= dt
         if self.cooldown_timer < 0:
             self.pos[0] = random.random() * DISPLAY_W
-            self.pos[1] = random.random() * DISPLAY_H * 0.333 + (DISPLAY_H * 0.667)
+            self.pos[1] = random.random() * DISPLAY_H * 0.1 + (DISPLAY_H * 0.9)
             self.cooldown_timer = TARGET_COOLDOWN_TIME
         self.draw()
 
@@ -111,7 +111,9 @@ class Collection(object):
                 player.update_manual(dt, keys)
             else:
                 player.update_auto(dt, target)
-            player.fitness += 1 - (get_angle(player, target) / 180)
+            fitness_increment = 1 - (get_angle(player, target) / 180)
+            if fitness_increment > 0.5:
+                player.fitness += 1 - (get_angle(player, target) / 180)
 
     def breed(self, parent_1, parent_2):
         child_player = Player(self.game_display, 0, DISPLAY_W/2, DISPLAY_H/2)
@@ -120,6 +122,10 @@ class Collection(object):
 
     def evolve(self):
         self.players.sort(key=lambda x: x.fitness, reverse=True)
+
+        print('---------------------------')
+        for p in self.players:
+            print(p.fitness)
 
         cut_off = int(len(self.players) * MUTATION_CUT_OFF)
         good_players = self.players[0:cut_off]
@@ -144,13 +150,11 @@ class Collection(object):
             idx_pair_breed = np.random.choice(np.arange(len(good_players)), 2, replace=False)
             if idx_pair_breed[0] != idx_pair_breed[1]:
                 child = self.breed(good_players[idx_pair_breed[0]], good_players[idx_pair_breed[1]])
-                if random.random() < MUTATION_WEIGHT_MODIFY_CHANCE:
-                    child.net.modify_weights()
+#                if random.random() < MUTATION_WEIGHT_MODIFY_CHANCE:
+#                    child.net.modify_weights()
                 new_players.append(child)
 
-        print('---------------------------')
-        for p in self.players:
-            print(p.fitness)
+        self.players = new_players
 
         self.reset()
 
