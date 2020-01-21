@@ -11,27 +11,21 @@ class Player(object):
         self.image = pygame.image.load(os.path.join('images', PLAYER_IMAGE_FILE)).convert_alpha()
         self.game_display = game_display
         self.rect = self.image.get_rect()
-#        self.angle = IMAGE_START_ANGLE
         self.angle = random.random() * 360
         self.pos = np.array([x, y])
         self.alliance = alliance
         self.fitness = 0
         self.net = Net(NUM_INPUTS, NUM_HIDDEN_1, NUM_HIDDEN_2, NUM_OUTPUTS)
-        self.soak_time = TARGET_SOAK_TIME
-
         self.image_ch = pygame.image.load(os.path.join('images', 'crosshair.png')).convert_alpha()
 
     def draw(self):
-
         if DISPLAY_GRAPHICS_BOOL:
             rotated = pygame.transform.rotate(self.image_ch, self.angle)
             rot_rect = rotated.get_rect()
             self.game_display.blit(rotated, (self.pos[0]-rot_rect.center[0], self.pos[1]-rot_rect.center[1]))
-
 #            rotated = pygame.transform.rotate(self.image, self.angle)
 #            rot_rect = rotated.get_rect()
 #            self.game_display.blit(rotated, (self.pos[0]-rot_rect.center[0], self.pos[1]-rot_rect.center[1]))
-
 
     def rotate(self, dt, direction):
         self.angle += dt * PLAYER_ROTATE_RATE * direction
@@ -47,53 +41,44 @@ class Player(object):
             self.rotate(dt, CLOCKWISE)
         self.draw()
 
+#    def update_auto(self, dt, target):
+#        self.act(dt, target)
+#        self.draw()
+#
+#    def act(self, dt, target):
+#        """based on inputs. add get_inputs inline. based on outputs, act/rotate"""
+#        inputs = self.get_inputs(target)
+#        outputs = self.net.feed_fwd(inputs)
+#        if outputs[0] > 0.5:
+#            self.rotate(dt, COUNTER_CLOCKWISE)
+#        if outputs[1] > 0.5:
+#            self.rotate(dt, CLOCKWISE)
+
     def update_auto(self, dt, target):
         self.act(dt, target)
         self.draw()
 
-    def act(self, dt, target):
+    def act(self, dt, action):
         """based on inputs. add get_inputs inline. based on outputs, act/rotate"""
-        inputs = self.get_inputs(target)
-        outputs = self.net.feed_fwd(inputs)
-        if outputs[0] > 0.5:
+        if action == 0:
             self.rotate(dt, COUNTER_CLOCKWISE)
-        if outputs[1] > 0.5:
+        elif action == 1:
             self.rotate(dt, CLOCKWISE)
+        else:
+            raise ValueError()
+
 
     def get_inputs(self, target):
         x_1 = self.angle/360
-        x_2 = target.pos[0]/DISPLAY_W
-        x_3 = target.pos[1]/DISPLAY_H
-        inputs = np.array([[x_1], [x_2], [x_3]])
+        x_2 = get_angle(self, target)
+#        x_2 = target.pos[0]/DISPLAY_W
+#        x_3 = target.pos[1]/DISPLAY_H
+        inputs = np.array([[x_1], [x_2]])
         return inputs
 
     def reset(self):
         self.angle = random.random() * 360
         self.fitness = 0
-
-
-class Target(object):
-
-    def __init__(self, game_display):
-        self.image = pygame.image.load(os.path.join('images', TARGET_IMAGE_FILE)).convert_alpha()
-        self.game_display = game_display
-        self.rect = self.image.get_rect()
-        self.pos = np.array([0, 0])
-        self.cooldown_timer = 0
-
-
-    def draw(self):
-        if DISPLAY_GRAPHICS_BOOL:
-            self.game_display.blit(self.image, (self.pos[0]-self.rect.center[0], self.pos[1]-self.rect.center[1]))
-
-    def update(self, dt):
-        self.cooldown_timer -= dt
-        if self.cooldown_timer < 0:
-            self.pos[0] = random.random() * DISPLAY_W
-            self.pos[1] = random.random() * DISPLAY_H
-#            self.pos[1] = random.random() * DISPLAY_H * 0.1 + (DISPLAY_H * 0.9)
-            self.cooldown_timer = TARGET_COOLDOWN_TIME
-        self.draw()
 
 
 class Collection(object):
@@ -109,116 +94,46 @@ class Collection(object):
             p.reset()
 
     def update(self, dt, target, keys):
-
         for player in self.players:
-
             if player.alliance == 0:
                 player.update_manual(dt, keys)
             else:
                 player.update_auto(dt, target)
-
-            if get_angle(player, target) < TARGET_GOOD_ANGLE_CONE:
-                player.soak_time -= dt
-            else:
-                player.soak_time = TARGET_SOAK_TIME
-
-            if player.soak_time < 0:
-                player.fitness += 1 - (get_angle(player, target) / 180)
-
-    def breed(self, parent_1, parent_2):
-        child_player = Player(self.game_display, 0, DISPLAY_W/2, DISPLAY_H/2)
-        child_player.net.create_mixed_weights(parent_1.net, parent_2.net)
-        return child_player
-
-    def amoeba(self, parent):
-        child_player = Player(self.game_display, 0, DISPLAY_W/2, DISPLAY_H/2)
-        child_player.net.create_mixed_weights(parent.net, parent.net)
-        child_player.net.modify_weights()
-        return child_player
-
+            player.fitness += 1 - (get_angle(player, target) / 180)
 
     def evolve(self):
 
         self.players.sort(key=lambda x: x.fitness, reverse=True)
 
-        survive_cut_off = int(len(self.players) * SURVIVE_CUT_OFF_PERC)
-
-        good_players = self.players[0:survive_cut_off]
-        bad_players = self.players[survive_cut_off:]
-        num_bad_take = int(len(self.players) * MUTATION_BAD_TO_KEEP)
-
-        print('---------------------------')
-        for p in self.players[:10]:
-            print(p.fitness)
-
-        for b in bad_players:
-            b.net.modify_weights()
-
-        new_players = []
-
-        idx_bad_take = np.random.choice(np.arange(len(bad_players)), num_bad_take, replace=False)
-
-        for index in idx_bad_take:
-            new_players.append(bad_players[index])
-
-        new_players.extend(good_players)
-
-        num_children_needed = len(self.players) - len(new_players)
-
-        while len(new_players) < len(self.players):
-            for i in range(3):
-                child = self.amoeba(good_players[i])
-                new_players.append(child)
-
-        self.players = new_players
         self.reset()
 
 
-#    def evolve(self):
-#
-#        self.players.sort(key=lambda x: x.fitness, reverse=True)
-#
-#        survive_cut_off = int(len(self.players) * MUTATION_CUT_OFF)
-#        breeding_cut_off = int(len(self.players) * SUPERIOR_BREEDING_POOL_PERC)
-#        good_players = self.players[0:survive_cut_off]
-#        bad_players = self.players[survive_cut_off:]
-#        breeding_players = self.players[0:breeding_cut_off]
-#        num_bad_take = int(len(self.players) * MUTATION_BAD_TO_KEEP)
-#
-#        print('---------------------------')
-#        for p in breeding_players:
-#            print(p.fitness)
-#
-#        for b in bad_players:
-#            b.net.modify_weights()
-#
-#        new_players = []
-#
-#        idx_bad_take = np.random.choice(np.arange(len(bad_players)), num_bad_take, replace=False)
-#
-#        for index in idx_bad_take:
-#            new_players.append(bad_players[index])
-#
-#        new_players.extend(good_players)
-#
-#        num_children_needed = len(self.players) - len(new_players)
-#
-#        while len(new_players) < len(self.players):
-#            idx_pair_breed = np.random.choice(np.arange(len(breeding_players)), 2, replace=True)
-#            child = self.breed(breeding_players[idx_pair_breed[0]], breeding_players[idx_pair_breed[1]])
-#            if random.random() < MUTATION_WEIGHT_MODIFY_CHANCE:
-#                child.net.modify_weights()
-#            new_players.append(child)
-##            idx_pair_breed = np.random.choice(np.arange(len(breeding_players)), 2, replace=False)
-##            if idx_pair_breed[0] != idx_pair_breed[1]:
-##                child = self.breed(breeding_players[idx_pair_breed[0]], breeding_players[idx_pair_breed[1]])
-##                if random.random() < MUTATION_WEIGHT_MODIFY_CHANCE:
-##                    child.net.modify_weights()
-##                new_players.append(child)
-#
-#        self.players = new_players
-#
-#        self.reset()
+class Target(object):
 
+    def __init__(self, game_display):
+        self.image = pygame.image.load(os.path.join('images', TARGET_IMAGE_FILE)).convert_alpha()
+        self.game_display = game_display
+        self.rect = self.image.get_rect()
+        self.old_pos = np.array([0, 0])
+        self.cur_pos = np.array([0, 0])
+        self.new_pos = np.array([0, 0])
+        self.travel_vector = np.array([0, 0])
+        self.cooldown_timer = 0
 
+    def draw(self):
+        if DISPLAY_GRAPHICS_BOOL:
+            self.game_display.blit(self.image, (self.cur_pos[0]-self.rect.center[0], self.cur_pos[1]-self.rect.center[1]))
 
+    def update(self, dt):
+
+        self.cooldown_timer -= dt
+
+        if self.cooldown_timer < 0:
+            self.new_pos[0] = random.random() * DISPLAY_W
+            self.new_pos[1] = random.random() * DISPLAY_H
+            self.old_pos = np.copy(self.cur_pos)
+            self.travel_vector = self.new_pos - self.old_pos
+            self.cooldown_timer = TARGET_COOLDOWN_TIME
+
+        self.cur_pos = self.old_pos + self.travel_vector * \
+                       ((TARGET_COOLDOWN_TIME - self.cooldown_timer)/TARGET_COOLDOWN_TIME)

@@ -2,14 +2,45 @@ import random
 import math
 import numpy as np
 from defs import *
+import pickle
+import os
+
+def save(item):
+
+    with open('my_table.pkl', 'wb') as file_output:
+        pickle.dump(item, file_output, pickle.HIGHEST_PROTOCOL)
+    print('saved q_table')
+
+def load():
+
+    if os.path.exists('my_table.pkl'):
+        with open('my_table.pkl', 'rb') as file_input:
+            item = pickle.load(file_input)
+        return item
+    else:
+        print("no existing q_table data")
+        raise ValueError()
 
 def get_angle(player, target):
 
     """returns angle between ship orientation and vector to target, {0, 180 degrees}"""
     player_unit_vector = [-math.sin(math.radians(player.angle)), -math.cos(math.radians(player.angle))]
-    player_to_target_vector = target.pos - player.pos
+    player_to_target_vector = target.cur_pos - player.pos
     angle_rad = math.acos(np.dot(player_unit_vector, player_to_target_vector)/(np.linalg.norm(player_unit_vector) * np.linalg.norm(player_to_target_vector)))
     angle_deg = math.degrees(angle_rad)
+    return(angle_deg)
+
+def get_polar_angle(player, target):
+
+    """returns angle between ship orientation and vector to target, {0, 360 degrees}"""
+    player_unit_vector = [0, -1]
+    player_to_target_vector = target.cur_pos - player.pos
+    angle_rad = math.acos(np.dot(player_unit_vector, player_to_target_vector)/(np.linalg.norm(player_unit_vector) * np.linalg.norm(player_to_target_vector)))
+    angle_deg = math.degrees(angle_rad)
+
+    if (player.pos[0] < target.cur_pos[0]): # target to the right of player
+            angle_deg = 360 - angle_deg
+
     return(angle_deg)
 
 def update_label(data, title, font, x, y, game_display):
